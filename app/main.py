@@ -27,14 +27,30 @@ def get_db():
     finally:
         db.close()
 
-def require_api_key(x_api_key: str = Header(None)):
+def require_api_key(
+    x_api_key: str = Header(None),
+    authorization: str = Header(None)
+):
+    """
+    Accepts either:
+      - X-API-Key: <API_KEY>
+      - Authorization: Bearer <API_KEY>
+    """
     if not API_KEY:
-        raise HTTPException(
-            status_code=500, detail="Server misconfiguration: API_KEY not set"
-        )
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
-    return True
+        raise HTTPException(status_code=500, detail="Server misconfiguration: API_KEY not set")
+
+    # Check X-API-Key header
+    if x_api_key and x_api_key.strip() == API_KEY.strip():
+        return True
+
+    # Check Authorization: Bearer header
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.replace("Bearer ", "").strip()
+        if token == API_KEY.strip():
+            return True
+
+    # If neither matched
+    raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 @app.get("/health")
 def health():
@@ -43,7 +59,7 @@ def health():
 @app.get("/debug/echo")
 def echo(request: Request):
     """
-    Debug endpoint: returns all request headers so you can check if GPT sends X-API-Key
+    Debug endpoint: returns all request headers
     """
     return {"headers": dict(request.headers)}
 
