@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from . import models, schemas, crud, database
@@ -29,7 +29,9 @@ def get_db():
 
 def require_api_key(x_api_key: str = Header(None)):
     if not API_KEY:
-        raise HTTPException(status_code=500, detail="Server misconfiguration: API_KEY not set")
+        raise HTTPException(
+            status_code=500, detail="Server misconfiguration: API_KEY not set"
+        )
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
     return True
@@ -37,6 +39,13 @@ def require_api_key(x_api_key: str = Header(None)):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/debug/echo")
+def echo(request: Request):
+    """
+    Debug endpoint: returns all request headers so you can check if GPT sends X-API-Key
+    """
+    return {"headers": dict(request.headers)}
 
 @app.post("/patients", response_model=schemas.PatientResponse, dependencies=[Depends(require_api_key)])
 def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)):
