@@ -8,7 +8,7 @@ API_KEY = os.getenv("API_KEY")
 
 app = FastAPI(title="Sreekrishna Ayurveda API", version="1.0.0")
 
-# Basic CORS (Actions are server-to-server, but keeping open for flexibility)
+# Basic CORS (open during development; tighten for production)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create tables on startup (simple approach for prototype)
+# Create tables on startup (simple approach for prototype/testing)
 models.Base.metadata.create_all(bind=database.engine)
 
 def get_db():
@@ -56,10 +56,22 @@ def require_api_key(
 def health():
     return {"status": "ok"}
 
+@app.delete("/reset", dependencies=[Depends(require_api_key)])
+def reset_database(db: Session = Depends(get_db)):
+    """
+    Danger: Deletes all patients and observations.
+    Only use this in testing/demo environments!
+    """
+    db.query(models.Observation).delete()
+    db.query(models.Patient).delete()
+    db.commit()
+    return {"message": "All patients and observations deleted"}
+
 @app.get("/debug/echo")
 def echo(request: Request):
     """
-    Debug endpoint: returns all request headers
+    Debug endpoint: returns all request headers.
+    Useful for checking if GPT sends Authorization or X-API-Key.
     """
     return {"headers": dict(request.headers)}
 
@@ -76,7 +88,7 @@ def read_patient(patient_id: int, db: Session = Depends(get_db)):
 
 @app.post("/observations", response_model=schemas.ObservationResponse, dependencies=[Depends(require_api_key)])
 def create_observation(obs: schemas.ObservationCreate, db: Session = Depends(get_db)):
-    # Optional: validate patient exists
+    # Validate patient exists
     patient = crud.get_patient(db, obs.patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
