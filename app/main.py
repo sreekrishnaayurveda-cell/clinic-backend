@@ -6,7 +6,7 @@ from . import models, schemas, crud, database
 
 API_KEY = os.getenv("API_KEY")
 
-app = FastAPI(title="Sreekrishna Ayurveda API", version="1.0.0")
+app = FastAPI(title="Sreekrishna Ayurveda Clinic API", version="1.0.0")
 
 # Basic CORS (open during development; tighten for production)
 app.add_middleware(
@@ -75,18 +75,30 @@ def echo(request: Request):
     """
     return {"headers": dict(request.headers)}
 
-@app.post("/patients", response_model=schemas.PatientResponse, dependencies=[Depends(require_api_key)])
+@app.post(
+    "/patients",
+    response_model=schemas.PatientResponse,
+    dependencies=[Depends(require_api_key)],
+)
 def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)):
     return crud.create_patient(db, patient)
 
-@app.get("/patients/{patient_id}", response_model=schemas.PatientResponse, dependencies=[Depends(require_api_key)])
+@app.get(
+    "/patients/{patient_id}",
+    response_model=schemas.PatientResponse,
+    dependencies=[Depends(require_api_key)],
+)
 def read_patient(patient_id: int, db: Session = Depends(get_db)):
     patient = crud.get_patient(db, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return patient
 
-@app.post("/observations", response_model=schemas.ObservationResponse, dependencies=[Depends(require_api_key)])
+@app.post(
+    "/observations",
+    response_model=schemas.ObservationResponse,
+    dependencies=[Depends(require_api_key)],
+)
 def create_observation(obs: schemas.ObservationCreate, db: Session = Depends(get_db)):
     # Validate patient exists
     patient = crud.get_patient(db, obs.patient_id)
@@ -94,7 +106,11 @@ def create_observation(obs: schemas.ObservationCreate, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="Patient not found")
     return crud.create_observation(db, obs)
 
-@app.get("/observations/{obs_id}", response_model=schemas.ObservationResponse, dependencies=[Depends(require_api_key)])
+@app.get(
+    "/observations/{obs_id}",
+    response_model=schemas.ObservationResponse,
+    dependencies=[Depends(require_api_key)],
+)
 def read_observation(obs_id: int, db: Session = Depends(get_db)):
     obs = crud.get_observation(db, obs_id)
     if not obs:
