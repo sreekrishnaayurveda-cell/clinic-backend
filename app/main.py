@@ -6,9 +6,13 @@ from . import models, schemas, crud, database
 
 API_KEY = os.getenv("API_KEY")
 
-app = FastAPI(title="Sreekrishna Ayurveda Clinic API", version="1.0.0")
+app = FastAPI(
+    title="Sreekrishna Ayurveda Clinic API",
+    version="1.0.0",
+    dependencies=[Depends(lambda: require_api_key())]  # enforce globally
+)
 
-# Basic CORS (open during development; tighten for production)
+# CORS (open for dev, restrict later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create tables on startup (simple approach for prototype/testing)
+# DB tables
 models.Base.metadata.create_all(bind=database.engine)
 
 def get_db():
@@ -31,86 +35,57 @@ def require_api_key(
     x_api_key: str = Header(None),
     authorization: str = Header(None)
 ):
-    """
-    Accepts either:
-      - X-API-Key: <API_KEY>
-      - Authorization: Bearer <API_KEY>
-    """
     if not API_KEY:
         raise HTTPException(status_code=500, detail="Server misconfiguration: API_KEY not set")
 
-    # Check X-API-Key header
-    if x_api_key and x_api_key.strip() == API_KEY.strip():
+    expected = API_KEY.strip()
+
+    if x_api_key and x_api_key.strip() == expected:
         return True
 
-    # Check Authorization: Bearer header
     if authorization and authorization.startswith("Bearer "):
-        token = authorization.replace("Bearer ", "").strip()
-        if token == API_KEY.strip():
+        token = authorization.split(" ", 1)[1].strip()
+        if token == expected:
             return True
 
-    # If neither matched
     raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
-@app.get("/health")
+# --- Public routes (override global dependency) ---
+@app.get("/health", dependencies=[])
 def health():
     return {"status": "ok"}
 
-@app.delete("/reset", dependencies=[Depends(require_api_key)])
+@app.get("/debug/echo", dependencies=[])
+def echo(request: Request):
+    return {"headers": dict(request.headers)}
+
+# --- Protected routes ---
+@app.delete("/reset")
 def reset_database(db: Session = Depends(get_db)):
-    """
-    Danger: Deletes all patients and observations.
-    Only use this in testing/demo environments!
-    """
     db.query(models.Observation).delete()
     db.query(models.Patient).delete()
     db.commit()
     return {"message": "All patients and observations deleted"}
 
-@app.get("/debug/echo")
-def echo(request: Request):
-    """
-    Debug endpoint: returns all request headers.
-    Useful for checking if GPT sends Authorization or X-API-Key.
-    """
-    return {"headers": dict(request.headers)}
-
-@app.post(
-    "/patients",
-    response_model=schemas.PatientResponse,
-    dependencies=[Depends(require_api_key)],
-)
+@app.post("/patients", response_model=schemas.PatientResponse)
 def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)):
     return crud.create_patient(db, patient)
 
-@app.get(
-    "/patients/{patient_id}",
-    response_model=schemas.PatientResponse,
-    dependencies=[Depends(require_api_key)],
-)
+@app.get("/patients/{patient_id}", response_model=schemas.PatientResponse)
 def read_patient(patient_id: int, db: Session = Depends(get_db)):
     patient = crud.get_patient(db, patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return patient
 
-@app.post(
-    "/observations",
-    response_model=schemas.ObservationResponse,
-    dependencies=[Depends(require_api_key)],
-)
+@app.post("/observations", response_model=schemas.ObservationResponse)
 def create_observation(obs: schemas.ObservationCreate, db: Session = Depends(get_db)):
-    # Validate patient exists
     patient = crud.get_patient(db, obs.patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return crud.create_observation(db, obs)
 
-@app.get(
-    "/observations/{obs_id}",
-    response_model=schemas.ObservationResponse,
-    dependencies=[Depends(require_api_key)],
-)
+@app.get("/observations/{obs_id}", response_model=schemas.ObservationResponse)
 def read_observation(obs_id: int, db: Session = Depends(get_db)):
     obs = crud.get_observation(db, obs_id)
     if not obs:
