@@ -1,141 +1,61 @@
-import os
-from fastapi import FastAPI, Depends, HTTPException, Header, Request
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from . import models, schemas, crud, database
+import uvicorn
+yield db
+finally:
+db.close()
 
-# -------------------------
-# Load API Key from Environment
-# -------------------------
-API_KEY = os.getenv("API_KEY")
+# ----------- System & Debug -----------
+@app.get("/health")
+async def health():
+return {"status": "ok"}
 
+@app.get("/debug/echo")
+async def debug_echo(request: Request):
+# Return request headers for debugging auth
+return {"headers": {k: v for k, v in request.headers.items()}}
 
-# -------------------------
-# DB Session Dependency
-# -------------------------
-def get_db():
-    db = database.SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+@app.delete("/reset", dependencies=[Depends(require_api_key)])
+async def reset(db: Session = Depends(get_db)):
+crud.reset_database(db)
+return {"detail": "Database reset"}
 
+# ----------- Patients -----------
+@app.post("/patients", response_model=schemas.PatientOut, dependencies=[Depends(require_api_key)])
+async def create_patient(payload: schemas.PatientCreate, db: Session = Depends(get_db)):
+return crud.create_patient(db, payload)
 
-# -------------------------
-# API Key Auth Dependency
-# -------------------------
-def require_api_key(
-    x_api_key: str = Header(None),
-    authorization: str = Header(None)
-):
-    if not API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Server misconfiguration: API_KEY not set"
-        )
+@app.get("/patients/{patient_id}", response_model=schemas.PatientOut, dependencies=[Depends(require_api_key)])
+async def get_patient(patient_id: int, db: Session = Depends(get_db)):
+patient = crud.get_patient(db, patient_id)
+if not patient:
+raise HTTPException(status_code=404, detail="Patient not found")
+return patient
 
-    expected = API_KEY.strip()
-
-    # Option 1: X-API-Key header
-    if x_api_key and x_api_key.strip() == expected:
-        return True
-
-    # Option 2: Authorization: Bearer <key>
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ", 1)[1].strip()
-        if token == expected:
-            return True
-
-    # Option 3: Authorization: <key> (no Bearer prefix)
-    if authorization and authorization.strip() == expected:
-        return True
-
-    # If nothing matched → reject
-    raise HTTPException(status_code=401, detail="Invalid or missing API key")
-
-
-# -------------------------
-# App Initialization
-# -------------------------
-app = FastAPI(
-    title="Sreekrishna Ayurveda Clinic API",
-    version="1.0.0",
-    dependencies=[Depends(require_api_key)]  # enforce API key globally
+# ----------- Observations -----------
+@app.post("/observations", response_model=schemas.ObservationOut, dependencies=[Depends(require_api_key)])
+async def create_observation(payload: schemas.ObservationCreate, db: Session = Depends(get_db)):
+# Note: Pydantic has already validated role-specific data shape
+obs = crud.create_observation(db, payload)
+# Normalize role and data in response
+return schemas.ObservationOut(
+id=obs.id,
+patient_id=obs.patient_id,
+role=obs.role,
+data=obs.data,
+created_at=obs.created_at,
 )
 
-# Enable CORS (open for dev, restrict later in prod)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+@app.get("/observations/{obs_id}", response_model=schemas.ObservationOut, dependencies=[Depends(require_api_key)])
+async def get_observation(obs_id: int, db: Session = Depends(get_db)):
+obs = crud.get_observation(db, obs_id)
+if not obs:
+raise HTTPException(status_code=404, detail="Observation not found")
+return schemas.ObservationOut(
+id=obs.id,
+patient_id=obs.patient_id,
+role=obs.role,
+data=obs.data,
+created_at=obs.created_at,
 )
 
-# Create tables on startup
-models.Base.metadata.create_all(bind=database.engine)
-
-
-# -------------------------
-# Public Routes (no auth)
-# -------------------------
-@app.get("/health", dependencies=[])
-def health():
-    """Health check (no authentication required)."""
-    return {"status": "ok"}
-
-
-@app.get("/debug/echo", dependencies=[])
-def echo(request: Request):
-    """Echo back request headers (no authentication required)."""
-    return {"headers": dict(request.headers)}
-
-
-# -------------------------
-# Protected Routes
-# -------------------------
-@app.delete("/reset")
-def reset_database(db: Session = Depends(get_db)):
-    """
-    Danger: Deletes all patients and observations.
-    Only use this in testing/demo environments!
-    """
-    db.query(models.Observation).delete()
-    db.query(models.Patient).delete()
-    db.commit()
-    return {"message": "All patients and observations deleted"}
-
-
-# -------------------------
-# Patients
-# -------------------------
-@app.post("/patients", response_model=schemas.PatientResponse)
-def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)):
-    return crud.create_patient(db, patient)
-
-
-@app.get("/patients/{patient_id}", response_model=schemas.PatientResponse)
-def read_patient(patient_id: int, db: Session = Depends(get_db)):
-    patient = crud.get_patient(db, patient_id)
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    return patient
-
-
-# -------------------------
-# Observations
-# -------------------------
-@app.post("/observations", response_model=schemas.ObservationResponse)
-def create_observation(obs: schemas.ObservationCreate, db: Session = Depends(get_db)):
-    patient = crud.get_patient(db, obs.patient_id)
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    return crud.create_observation(db, obs)
-
-
-@app.get("/observations/{obs_id}", response_model=schemas.ObservationResponse)
-def read_observation(obs_id: int, db: Session = Depends(get_db)):
-    obs = crud.get_observation(db, obs_id)
-    if not obs:
-        raise HTTPException(status_code=404, detail="Observation not found")
-    return obs
+if __name__ == "__main__":
+uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
