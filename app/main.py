@@ -4,9 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from . import models, schemas, crud, database
 
-# -------------------------
-# Load API Key from Environment
-# -------------------------
 API_KEY = os.getenv("API_KEY")
 
 
@@ -29,24 +26,18 @@ def require_api_key(
     authorization: str = Header(None)
 ):
     if not API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Server misconfiguration: API_KEY not set"
-        )
+        raise HTTPException(status_code=500, detail="Server misconfiguration: API_KEY not set")
 
     expected = API_KEY.strip()
 
-    # Option 1: X-API-Key header
     if x_api_key and x_api_key.strip() == expected:
         return True
 
-    # Option 2: Authorization: Bearer <API_KEY>
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ", 1)[1].strip()
         if token == expected:
             return True
 
-    # If neither matched
     raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
@@ -56,10 +47,10 @@ def require_api_key(
 app = FastAPI(
     title="Sreekrishna Ayurveda Clinic API",
     version="1.0.0",
-    dependencies=[Depends(require_api_key)]  # enforce API key globally
+    dependencies=[Depends(require_api_key)]  # global enforcement
 )
 
-# Enable CORS (open for dev, restrict origins later in prod)
+# CORS (open for dev, restrict later)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -73,7 +64,7 @@ models.Base.metadata.create_all(bind=database.engine)
 
 
 # -------------------------
-# Public Routes
+# Public Routes (no auth)
 # -------------------------
 @app.get("/health", dependencies=[])
 def health():
@@ -83,7 +74,7 @@ def health():
 
 @app.get("/debug/echo", dependencies=[])
 def echo(request: Request):
-    """Echo back request headers (for debugging API key headers)."""
+    """Echo back request headers (no authentication required)."""
     return {"headers": dict(request.headers)}
 
 
@@ -92,19 +83,12 @@ def echo(request: Request):
 # -------------------------
 @app.delete("/reset")
 def reset_database(db: Session = Depends(get_db)):
-    """
-    Danger: Deletes all patients and observations.
-    Only use this in testing/demo environments!
-    """
     db.query(models.Observation).delete()
     db.query(models.Patient).delete()
     db.commit()
     return {"message": "All patients and observations deleted"}
 
 
-# -------------------------
-# Patients
-# -------------------------
 @app.post("/patients", response_model=schemas.PatientResponse)
 def create_patient(patient: schemas.PatientCreate, db: Session = Depends(get_db)):
     return crud.create_patient(db, patient)
@@ -118,9 +102,6 @@ def read_patient(patient_id: int, db: Session = Depends(get_db)):
     return patient
 
 
-# -------------------------
-# Observations
-# -------------------------
 @app.post("/observations", response_model=schemas.ObservationResponse)
 def create_observation(obs: schemas.ObservationCreate, db: Session = Depends(get_db)):
     patient = crud.get_patient(db, obs.patient_id)
