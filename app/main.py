@@ -3,11 +3,10 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from . import models, schemas, crud
-from .database import Base, engine, SessionLocal
-from .security import require_api_key
+from app import models, schemas, crud
+from app.database import Base, engine, SessionLocal
+from app.security import require_api_key
 
-# -------------------- App Setup --------------------
 app = FastAPI(
     title="Sreekrishna Ayurveda Clinic API",
     version="1.0.0",
@@ -16,7 +15,7 @@ app = FastAPI(
                 "Sreekrishna Ayurveda Clinic.",
 )
 
-# Enable CORS (open for now; restrict later in production)
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -25,10 +24,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create tables automatically on startup (simple dev approach)
 Base.metadata.create_all(bind=engine)
 
-# Dependency to get DB session per request
 def get_db():
     db = SessionLocal()
     try:
@@ -36,34 +33,26 @@ def get_db():
     finally:
         db.close()
 
-# -------------------- System & Debug --------------------
+# -------------------- System --------------------
 @app.get("/health")
 async def health():
-    """Check API health."""
     return {"status": "ok"}
 
 @app.get("/debug/echo")
 async def debug_echo(request: Request):
-    """Echo headers back (useful for debugging API key issues)."""
     return {"headers": {k: v for k, v in request.headers.items()}}
 
 @app.delete("/reset", dependencies=[Depends(require_api_key)])
 async def reset(db: Session = Depends(get_db)):
-    """Delete all patients and observations (testing only)."""
     crud.reset_database(db)
     return {"detail": "Database reset"}
 
 # -------------------- Patients --------------------
-@app.post("/patients",
-          response_model=schemas.PatientOut,
-          dependencies=[Depends(require_api_key)])
-async def create_patient(payload: schemas.PatientCreate,
-                         db: Session = Depends(get_db)):
+@app.post("/patients", response_model=schemas.PatientOut, dependencies=[Depends(require_api_key)])
+async def create_patient(payload: schemas.PatientCreate, db: Session = Depends(get_db)):
     return crud.create_patient(db, payload)
 
-@app.get("/patients/{patient_id}",
-         response_model=schemas.PatientOut,
-         dependencies=[Depends(require_api_key)])
+@app.get("/patients/{patient_id}", response_model=schemas.PatientOut, dependencies=[Depends(require_api_key)])
 async def get_patient(patient_id: int, db: Session = Depends(get_db)):
     patient = crud.get_patient(db, patient_id)
     if not patient:
@@ -71,11 +60,8 @@ async def get_patient(patient_id: int, db: Session = Depends(get_db)):
     return patient
 
 # -------------------- Observations --------------------
-@app.post("/observations",
-          response_model=schemas.ObservationOut,
-          dependencies=[Depends(require_api_key)])
-async def create_observation(payload: schemas.ObservationCreate,
-                             db: Session = Depends(get_db)):
+@app.post("/observations", response_model=schemas.ObservationOut, dependencies=[Depends(require_api_key)])
+async def create_observation(payload: schemas.ObservationCreate, db: Session = Depends(get_db)):
     obs = crud.create_observation(db, payload)
     return schemas.ObservationOut(
         id=obs.id,
@@ -85,9 +71,7 @@ async def create_observation(payload: schemas.ObservationCreate,
         created_at=obs.created_at,
     )
 
-@app.get("/observations/{obs_id}",
-         response_model=schemas.ObservationOut,
-         dependencies=[Depends(require_api_key)])
+@app.get("/observations/{obs_id}", response_model=schemas.ObservationOut, dependencies=[Depends(require_api_key)])
 async def get_observation(obs_id: int, db: Session = Depends(get_db)):
     obs = crud.get_observation(db, obs_id)
     if not obs:
@@ -100,6 +84,5 @@ async def get_observation(obs_id: int, db: Session = Depends(get_db)):
         created_at=obs.created_at,
     )
 
-# -------------------- Entrypoint --------------------
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
