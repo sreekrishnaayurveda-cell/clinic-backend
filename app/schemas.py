@@ -1,7 +1,7 @@
-from typing import Optional, Union, Dict, Any, List
+from typing import Optional, Dict, Any, List
 from enum import Enum
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 # -------------------- Roles --------------------
@@ -91,14 +91,11 @@ class TherapistObservation(BaseModel):
     session_notes: Optional[str] = None
 
 
-# -------------------- Observation --------------------
-ObservationData = Union[NurseObservation, DoctorObservation, TherapistObservation]
-
-
+# -------------------- Observation Wrapper --------------------
 class ObservationCreate(BaseModel):
     patient_id: int
     role: Role
-    data: ObservationData
+    data: Dict[str, Any]   # ✅ generic dict, validated in crud.py
 
 
 class ObservationOut(BaseModel):
