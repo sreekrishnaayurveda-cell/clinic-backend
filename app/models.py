@@ -1,7 +1,5 @@
-from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
-from sqlalchemy.orm import relationship
-
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func
+from sqlalchemy.dialects.postgresql import JSON
 from .database import Base
 
 
@@ -17,20 +15,12 @@ class Patient(Base):
     occupation = Column(String, nullable=True)
     marital_status = Column(String, nullable=True)
 
-    observations = relationship(
-        "Observation",
-        back_populates="patient",
-        cascade="all, delete-orphan"
-    )
-
 
 class Observation(Base):
     __tablename__ = "observations"
 
     id = Column(Integer, primary_key=True, index=True)
-    patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False, index=True)
-    role = Column(String, nullable=False)  # Nurse / Doctor / Therapist
-    data = Column(JSON, nullable=False)    # structured JSON
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-    patient = relationship("Patient", back_populates="observations")
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
+    role = Column(String, nullable=False)
+    data = Column(JSON, nullable=False)   # ✅ store structured dict safely
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
