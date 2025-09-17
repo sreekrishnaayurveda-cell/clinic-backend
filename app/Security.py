@@ -1,20 +1,13 @@
 import os
 from fastapi import Header, HTTPException
 
-# Load from Render environment variable (set in dashboard)
 API_KEY = os.getenv("API_KEY")
 
 async def require_api_key(
     x_api_key: str | None = Header(default=None),
-    authorization: str | None = Header(default=None)
+    authorization: str | None = Header(default=None),
 ):
-    """
-    Accepts either:
-    - X-API-Key: <API_KEY>
-    - Authorization: Bearer <API_KEY>
-    """
     if not API_KEY:
-        # For safety: block if no key is set
         raise HTTPException(status_code=500, detail="Server misconfiguration: API_KEY not set")
 
     supplied = None
