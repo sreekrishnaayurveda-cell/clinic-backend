@@ -17,7 +17,6 @@ class Patient(Base):
     occupation = Column(String, nullable=True)
     marital_status = Column(String, nullable=True)
 
-    # Relationship: one patient can have many observations
     observations = relationship(
         "Observation",
         back_populates="patient",
@@ -31,8 +30,7 @@ class Observation(Base):
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("patients.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String, nullable=False)  # Nurse / Doctor / Therapist
-    data = Column(JSON, nullable=False)    # structured JSON per role
+    data = Column(JSON, nullable=False)    # structured JSON
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # Relationship: link back to patient
     patient = relationship("Patient", back_populates="observations")
